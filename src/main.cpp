@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <LiquidCrystal.h>
-#include <SimpleEncoder.h>
+#include <Encoder.h>
 #include <BasicStepperDriver.h>
 
 // Pins Configuration
@@ -31,66 +31,77 @@
 #define RPM_DEFAULT 120
 
 LiquidCrystal lcd(RS, ENABLE, D4, D5, D6, D7);
-SimpleEncoder encoder(BUTTON, ENCODER_A, ENCODER_B, RPM_DEFAULT, RPM_MIN, RPM_MAX);
+Encoder encoder(ENCODER_A, ENCODER_B);
 
 BasicStepperDriver stepper(MOTOR_STEPS, DIR, STEP, MOTOR_ENABLE);
 
-long encoder_current;
+long encoder_diff, set_speed = RPM_DEFAULT;
+unsigned wait_time_micros;
+bool prev_motor_state=false, encoder_changed=false;
  
 void setup() { 
   lcd.begin(16, 2);
   lcd.setCursor(0,0);
   lcd.write("WASP Extruder");
   lcd.setCursor(0, 1);
-  lcd.write("Speed: ");
+  lcd.write("Speed:     DRV:0");
 
   pinMode(KUKA_ENABLE, INPUT_PULLUP);
+  pinMode(BUTTON, INPUT_PULLUP);
   stepper.setEnableActiveState(LOW);
 
-  stepper.begin(encoder.getValue(), 2);
+  stepper.begin(set_speed, 2);
   stepper.enable();
 }
 
-unsigned wait_time_micros;
-
 void loop() {
 
-  if(encoder.buttonPressed() || !digitalRead(KUKA_ENABLE)){
-    lcd.setCursor(11, 1);
-    lcd.print("DRV:1");
+  if(!digitalRead(BUTTON) || !digitalRead(KUKA_ENABLE)){
+    if (!prev_motor_state)
+    {
+      lcd.setCursor(15, 1);
+      lcd.print("1");
+    }
     stepper.enable();
-    stepper.setRPM(encoder_current);
+    stepper.setRPM(set_speed);
     stepper.startMove(100);
     wait_time_micros = stepper.nextAction();
+    prev_motor_state = true;
     
   } else
   {
-    lcd.setCursor(11, 1);
-    lcd.print("DRV:0");
+    if (prev_motor_state)
+    {
+      lcd.setCursor(15, 1);
+      lcd.print("0");
+    }
     stepper.stop();
     stepper.disable();
     wait_time_micros = 200;
+    prev_motor_state = false;
   }
 
   if(wait_time_micros > 100){
-    if (encoder.clockwise() && encoder_current == RPM_MAX )
-    {
-      encoder.setValue(RPM_MIN);
-      encoder_current = RPM_MIN;
+    encoder_diff = encoder.readAndReset();
+
+    // If changed
+    if(abs(encoder_diff) > 0){
+      if (set_speed + encoder_diff > RPM_MAX )
+      {
+        set_speed = RPM_MIN;
+      }
+      else if (set_speed + encoder_diff < RPM_MIN )
+      {
+        set_speed = RPM_MAX;
+      }
+      else
+      {
+        set_speed += encoder_diff;
+      }
+      
+      lcd.setCursor(6, 1);
+      lcd.print(set_speed);
     }
-    else if (encoder.counterClockwise() && encoder_current == RPM_MIN )
-    {
-      encoder.setValue(RPM_MAX);
-      encoder_current = RPM_MAX;
-    }
-    else
-    {
-      encoder_current = encoder.getValue();
-    }
-    
-    lcd.setCursor(6, 1);
-    lcd.print(encoder_current);
   }
-  
 }
 
