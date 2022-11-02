@@ -18,9 +18,9 @@
 #define D7 41
 
 // Encoder
-#define BUTTON 4
-#define ENCODER_A 3
-#define ENCODER_B 2
+#define BUTTON 5
+#define ENCODER_A 2
+#define ENCODER_B 3
 
 // Kuka IO
 #define KUKA_ENABLE 7
@@ -54,9 +54,15 @@ void setup() {
   stepper.enable();
 }
 
+/**
+ * @brief loop function to check the inputs and run the motor
+ * 
+ * 
+ */
+
 void loop() {
 
-  if(!digitalRead(BUTTON) || !digitalRead(KUKA_ENABLE)){
+  if(!digitalRead(BUTTON) || digitalRead(KUKA_ENABLE)){
     if (!prev_motor_state)
     {
       lcd.setCursor(15, 1);
