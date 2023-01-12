@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
 #include <Encoder.h>
 #include <BasicStepperDriver.h>
 
@@ -10,28 +10,25 @@
 #define MOTOR_ENABLE 10
 
 // LCD
-#define RS 51
-#define ENABLE 49
-#define D4 47
-#define D5 45
-#define D6 43
-#define D7 41
+#define ADDR 0x20
+#define N_COL 16
+#define N_ROWS 2
 
 // Encoder
 #define BUTTON 5
-#define ENCODER_A 2
-#define ENCODER_B 3
+#define ENCODER_DT 3
+#define ENCODER_CLK 2
 
 // Kuka IO
-#define KUKA_ENABLE 7
+#define KUKA_ENABLE 13
 
 #define MOTOR_STEPS 200
 #define RPM_MIN 100
 #define RPM_MAX 250
 #define RPM_DEFAULT 120
 
-LiquidCrystal lcd(RS, ENABLE, D4, D5, D6, D7);
-Encoder encoder(ENCODER_A, ENCODER_B);
+LiquidCrystal_I2C lcd(ADDR, N_COL, N_ROWS);
+Encoder encoder(ENCODER_DT, ENCODER_CLK);
 
 BasicStepperDriver stepper(MOTOR_STEPS, DIR, STEP, MOTOR_ENABLE);
 
@@ -40,12 +37,16 @@ unsigned wait_time_micros;
 bool prev_motor_state=false, encoder_changed=false;
  
 void setup() { 
-  lcd.begin(16, 2);
+  lcd.init();
+  lcd.backlight();
   lcd.setCursor(0,0);
-  lcd.write("WASP Extruder");
+  lcd.print("WASP Extruder");
   lcd.setCursor(0, 1);
-  lcd.write("Speed:     DRV:0");
+  lcd.print("Speed:     DRV:0");
 
+  lcd.setCursor(6, 1);
+  lcd.print(set_speed);
+  
   pinMode(KUKA_ENABLE, INPUT_PULLUP);
   pinMode(BUTTON, INPUT_PULLUP);
   stepper.setEnableActiveState(LOW);

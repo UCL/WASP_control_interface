@@ -23,34 +23,9 @@ Connection | Arduino Pin
 Motor driver direction | 8
 Motor driver step | 9
 Motor driver Enable | 10
-LCD RS | 51
-LCD Enable | 49
-LCD D4 | 47
-LCD D5 | 45
-LCD D6 | 43
-LCD D7 | 41
-Push button (encoder) | 4
-Encoder A | 3
-Encoder B | 2
-Kuka IO | 7
-
-### LCD Screen Ribbon
-LCD Pin | Colour | Connection 
----|---|---
-VSS | Black | GND
-VDD | White | 5V
-V0 | Grey | Potentiometer Output
-RS | Purple | Arduino 51
-RW | Blue | GND
-E | Green | Arduino 49
-D0 | NC | NC
-D1 | NC | NC
-D2 | NC | NC
-D3 | NC | NC
-D4 | Yellow | Arduino 47
-D5 | Orange | Arduino 45
-D6 | Red | Arduino 43
-D7 | Brown | Arduino 41
-A | White | 5V 
-K | Black | GND
-
+LCD SDA | 20
+LCD SCL | 21
+Push button (encoder) | 5
+Encoder DT | 3
+Encoder CLK | 2
+Kuka IO | 13
