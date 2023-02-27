@@ -1,57 +1,92 @@
 #include <Arduino.h>
-#include <LiquidCrystal.h>
-#include <Encoder.h>
 #include <BasicStepperDriver.h>
-
-// Pins Configuration
-// Motor Driver
-#define DIR 8
-#define STEP 9
-#define MOTOR_ENABLE 10
-
-// LCD
-#define RS 51
-#define ENABLE 49
-#define D4 47
-#define D5 45
-#define D6 43
-#define D7 41
-
-// Encoder
-#define BUTTON 5
-#define ENCODER_A 2
-#define ENCODER_B 3
-
-// Kuka IO
-#define KUKA_ENABLE 7
+#include <MultiDriver.h>
+#include <pin_config.h>
 
 #define MOTOR_STEPS 200
-#define RPM_MIN 100
-#define RPM_MAX 250
-#define RPM_DEFAULT 120
+#define MICROSTEPS 1
+#define RPM_MIN 0
+#define RPM_MAX 300
+#define RPM_DEFAULT 100
 
-LiquidCrystal lcd(RS, ENABLE, D4, D5, D6, D7);
-Encoder encoder(ENCODER_A, ENCODER_B);
+//TODO: enable the use of the 4th driver
+BasicStepperDriver stepper_a(MOTOR_STEPS, AXIS_A_DIR, AXIS_A_STP, AXIS_A_ENA),
+                  stepper_b(MOTOR_STEPS, AXIS_B_DIR, AXIS_B_STP, AXIS_B_ENA),
+                  stepper_c(MOTOR_STEPS, AXIS_C_DIR, AXIS_C_STP, AXIS_C_ENA);
+                  // stepper_d(MOTOR_STEPS, AXIS_D_DIR, AXIS_D_STP, AXIS_D_ENA);
 
-BasicStepperDriver stepper(MOTOR_STEPS, DIR, STEP, MOTOR_ENABLE);
+MultiDriver multi_driver(stepper_a, stepper_b, stepper_c); 
 
-long encoder_diff, set_speed = RPM_DEFAULT;
+long encoder_diff;
+int set_speed_a = RPM_DEFAULT, set_speed_b = RPM_DEFAULT, set_speed_c = RPM_DEFAULT;
 unsigned wait_time_micros;
 bool prev_motor_state=false, encoder_changed=false;
  
 void setup() { 
-  lcd.begin(16, 2);
-  lcd.setCursor(0,0);
-  lcd.write("WASP Extruder");
-  lcd.setCursor(0, 1);
-  lcd.write("Speed:     DRV:0");
+  pinMode(ENABLE, INPUT_PULLUP);
+  pinMode(SW1, INPUT_PULLUP);
+  pinMode(SW2, INPUT_PULLUP);
+  pinMode(SW3, INPUT_PULLUP);
 
-  pinMode(KUKA_ENABLE, INPUT_PULLUP);
-  pinMode(BUTTON, INPUT_PULLUP);
-  stepper.setEnableActiveState(LOW);
+  multi_driver.enable();
+  multi_driver.begin(RPM_DEFAULT, MICROSTEPS);
+}
 
-  stepper.begin(set_speed, 2);
-  stepper.enable();
+void calculateSpeedFromIO(int sw1, int sw2, int sw3){
+  byte state = 0b000;
+  bitWrite(state, 0, sw1);
+  bitWrite(state, 1, sw2);
+  bitWrite(state, 2, sw3);
+  switch (state)
+  {
+  case 0b111: // 1 1 1
+    // 50:50 split
+    set_speed_a = 50;
+    set_speed_b = 50;
+    set_speed_c = 100;
+    break;
+  
+  case 0b110: // 1 1 0
+    // 75:25 split
+    set_speed_a = 75;
+    set_speed_b = 25;
+    set_speed_c = 100;
+    break;
+
+  case 0b100: // 1 0 0
+    // 100:0 split
+    set_speed_a = 100;
+    set_speed_b = 0;
+    set_speed_c = 100;
+    break;
+
+  case 0b000: // 0 0 0
+    // off
+    set_speed_a = 0;
+    set_speed_b = 0;
+    set_speed_c = 0;
+    break;
+
+  case 0b001: // 0 0 1
+    // 0:100 split
+    set_speed_a = 100;
+    set_speed_b = 0;
+    set_speed_c = 100;
+    break;
+
+  case 0b011: // 0 1 1
+    // 25:75 split
+    set_speed_a = 25;
+    set_speed_b = 75;
+    set_speed_c = 100;
+    break;
+  
+  default:
+    set_speed_a = 0;
+    set_speed_b = 0;
+    set_speed_c = 0;
+    break;
+  }
 }
 
 /**
@@ -61,53 +96,19 @@ void setup() {
  */
 
 void loop() {
+  if(!digitalRead(ENABLE)){
+    calculateSpeedFromIO(digitalRead(SW1), digitalRead(SW2), digitalRead(SW3));
 
-  if(!digitalRead(BUTTON) || digitalRead(KUKA_ENABLE)){
-    if (!prev_motor_state)
-    {
-      lcd.setCursor(15, 1);
-      lcd.print("1");
-    }
-    stepper.enable();
-    stepper.setRPM(set_speed);
-    stepper.startMove(100);
-    wait_time_micros = stepper.nextAction();
-    prev_motor_state = true;
-    
+    multi_driver.enable();
+    multi_driver.setRPM(set_speed_a, set_speed_b, set_speed_c);
+    multi_driver.startMove(100, 100, 100);
+    wait_time_micros = multi_driver.nextAction();
   } else
   {
-    if (prev_motor_state)
-    {
-      lcd.setCursor(15, 1);
-      lcd.print("0");
-    }
-    stepper.stop();
-    stepper.disable();
+    multi_driver.stop();
+    multi_driver.disable();
     wait_time_micros = 200;
     prev_motor_state = false;
-  }
-
-  if(wait_time_micros > 100){
-    encoder_diff = encoder.readAndReset();
-
-    // If changed
-    if(abs(encoder_diff) > 0){
-      if (set_speed + encoder_diff > RPM_MAX )
-      {
-        set_speed = RPM_MIN;
-      }
-      else if (set_speed + encoder_diff < RPM_MIN )
-      {
-        set_speed = RPM_MAX;
-      }
-      else
-      {
-        set_speed += encoder_diff;
-      }
-      
-      lcd.setCursor(6, 1);
-      lcd.print(set_speed);
-    }
   }
 }
 
