@@ -1,6 +1,9 @@
 #ifndef MULTI_STEPPER_EXTRUDER_CFG
 #define MULTI_STEPPER_EXTRUDER_CFG
 
+#define MOTOR_STEPS 200 
+#define MICROSTEPS 1
+
 // RPM revolutions per minute for each motor
 // This is assuming 200 steps / rev motors and microstepping set to 1
 // Chamber A (motor A)

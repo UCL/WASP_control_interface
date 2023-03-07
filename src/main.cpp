@@ -1,24 +1,22 @@
 #include <Arduino.h>
-#include <BasicStepperDriver.h>
-#include <MultiDriver.h>
 #include <arduino-timer.h>
 #include "pin_config.h"
 #include "extruder_settings.h"
+#include <AccelStepper.h>
+#include <MultiStepper.h>
 
-#define MOTOR_STEPS 200
-#define MICROSTEPS 1
 
 //TODO: enable the use of the 4th driver
-BasicStepperDriver stepper_a(MOTOR_STEPS, AXIS_A_DIR, AXIS_A_STP, AXIS_A_ENA),
-                  stepper_b(MOTOR_STEPS, AXIS_B_DIR, AXIS_B_STP, AXIS_B_ENA),
-                  stepper_c(MOTOR_STEPS, AXIS_C_DIR, AXIS_C_STP, AXIS_C_ENA);
-                  // stepper_d(MOTOR_STEPS, AXIS_D_DIR, AXIS_D_STP, AXIS_D_ENA);
+AccelStepper stepper_a(AccelStepper::DRIVER, AXIS_A_STP, AXIS_A_DIR),
+             stepper_b(AccelStepper::DRIVER, AXIS_B_STP, AXIS_B_DIR),
+             stepper_c(AccelStepper::DRIVER, AXIS_C_STP, AXIS_C_DIR);
 
-MultiDriver multi_driver(stepper_a, stepper_b, stepper_c); 
+MultiStepper multi_stepper; 
 
 int set_speed_a = 0, set_speed_b = 0, set_speed_c = 0;
-
 int status_enable = 0, status_sw1 = 0, status_sw2 = 0, status_sw3 = 0;
+bool running = false, changed = false;
+byte previous_state = 0b000;
 
 auto timer = timer_create_default();
 char buff[50];
@@ -38,8 +36,17 @@ void setup() {
   pinMode(SW2, INPUT);
   pinMode(SW3, INPUT);
 
-  // multi_driver.enable();
-  multi_driver.begin(0, MICROSTEPS);
+  stepper_a.setEnablePin(AXIS_A_ENA);
+  stepper_b.setEnablePin(AXIS_B_ENA);
+  stepper_c.setEnablePin(AXIS_C_ENA);
+
+  stepper_a.setMaxSpeed(500);
+  stepper_b.setMaxSpeed(500);
+  stepper_c.setMaxSpeed(500);
+
+  multi_stepper.addStepper(stepper_a);
+  multi_stepper.addStepper(stepper_b);
+  multi_stepper.addStepper(stepper_c);
 
   if (Serial)
   {
@@ -49,11 +56,12 @@ void setup() {
   
 }
 
-void calculateSpeedFromIO(int sw1, int sw2, int sw3){
+bool calculateSpeedFromIO(int sw1, int sw2, int sw3){
   byte state = 0b000;
   bitWrite(state, 0, sw1);
   bitWrite(state, 1, sw2);
   bitWrite(state, 2, sw3);
+
   switch (state)
   {
   case 0b111: // 1 1 1
@@ -104,6 +112,19 @@ void calculateSpeedFromIO(int sw1, int sw2, int sw3){
     set_speed_c = 0;
     break;
   }
+
+  // Return true if state has changed;
+  if(state != previous_state){
+    previous_state = state;
+    return true;
+  } else{
+    previous_state = state;
+    return false;
+  }
+}
+
+float rpmToStep(float rpm){
+  return rpm * (MICROSTEPS * MOTOR_STEPS)/60.0;
 }
 
 /**
@@ -120,17 +141,38 @@ void loop() {
   timer.tick();
 
   if(status_enable){
-    multi_driver.enable();
-    calculateSpeedFromIO(status_sw1, status_sw2, status_sw3);
+    // Check if the state (switches) are different
+    if(calculateSpeedFromIO(status_sw1, status_sw2, status_sw3) || !running){
+      stepper_a.setSpeed(rpmToStep(set_speed_a));
+      stepper_b.setSpeed(rpmToStep(set_speed_b));
+      stepper_c.setSpeed(rpmToStep(set_speed_c));
+    }
 
-    multi_driver.setRPM(set_speed_a, set_speed_b, set_speed_c);
-    multi_driver.startMove(set_speed_a > 0? 100 : 0, set_speed_b > 0? 100 : 0, set_speed_c > 0? 100 : 0);
-    multi_driver.nextAction();
+    if(!running){
+      stepper_a.enableOutputs();
+      stepper_b.enableOutputs();
+      stepper_c.enableOutputs();
+
+      running = true;
+    }
+    
+    stepper_a.runSpeed();
+    stepper_b.runSpeed();
+    stepper_c.runSpeed();
+    
   } else
   {
-    multi_driver.stop();
-    multi_driver.disable();
+    if(running){
+      stepper_a.stop();
+      stepper_b.stop();
+      stepper_c.stop();
+
+      stepper_a.disableOutputs();
+      stepper_b.disableOutputs();
+      stepper_c.disableOutputs();
+
+      running = false;
+    }
   }
-  
 }
 
